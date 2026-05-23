@@ -131,6 +131,14 @@ Resources:
 
       HealthCheckPath: /
       HealthCheckProtocol: HTTP
+      
+      Targets:
+        - Id: !Ref WebServer1
+        - Id: !Ref WebServer2
+        - Id: !Ref WebServer3
+        - Id: !Ref WebServer4
+        - Id: !Ref WebServer5
+        - Id: !Ref WebServer6
 
 # =====================================================
 # LISTENER
@@ -995,51 +1003,6 @@ Resources:
           </html>
           EOF
 
-# =====================================================
-# ATTACH INSTANCES TO TARGET GROUP
-# =====================================================
-
-  Target1:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
-    Properties:
-      TargetGroupArn: !Ref TargetGroup
-      TargetId: !Ref WebServer1
-      Port: 80
-
-  Target2:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
-    Properties:
-      TargetGroupArn: !Ref TargetGroup
-      TargetId: !Ref WebServer2
-      Port: 80
-
-  Target3:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
-    Properties:
-      TargetGroupArn: !Ref TargetGroup
-      TargetId: !Ref WebServer3
-      Port: 80
-
-  Target4:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
-    Properties:
-      TargetGroupArn: !Ref TargetGroup
-      TargetId: !Ref WebServer4
-      Port: 80
-
-  Target5:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
-    Properties:
-      TargetGroupArn: !Ref TargetGroup
-      TargetId: !Ref WebServer5
-      Port: 80
-
-  Target6:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
-    Properties:
-      TargetGroupArn: !Ref TargetGroup
-      TargetId: !Ref WebServer6
-      Port: 80
 
 # =====================================================
 # OUTPUTS
