@@ -6,7 +6,7 @@ Description: >
 
 Parameters:
 
-    KeyName: ClaveLaboratorio1
+  KeyName: ClaveLaboratorio1
     Description: Nombre del KeyPair SSH existente
     Type: AWS::EC2::KeyPair::KeyName
 
