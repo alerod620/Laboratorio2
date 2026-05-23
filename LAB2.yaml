@@ -1,20 +1,16 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  Infraestructura en Alta Disponibilidad con NGINX usando AWS CloudFormation.
-  Despliega 2 instancias EC2 en diferentes zonas de disponibilidad
-  con un Application Load Balancer.
+Description: Infraestructura Alta Disponibilidad con 6 servidores NGINX
 
 Parameters:
-
   KeyName:
-    Description: Nombre del KeyPair SSH existente
+    Description: Nombre del KeyPair SSH
     Type: AWS::EC2::KeyPair::KeyName
 
 Resources:
 
-# -----------------------------
+# =====================================================
 # VPC
-# -----------------------------
+# =====================================================
 
   LabVPC:
     Type: AWS::EC2::VPC
@@ -22,20 +18,9 @@ Resources:
       CidrBlock: 10.0.0.0/16
       EnableDnsSupport: true
       EnableDnsHostnames: true
-      Tags:
-        - Key: Name
-          Value: LabVPC
-
-# -----------------------------
-# Internet Gateway
-# -----------------------------
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
-    Properties:
-      Tags:
-        - Key: Name
-          Value: LabIGW
 
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -43,9 +28,9 @@ Resources:
       VpcId: !Ref LabVPC
       InternetGatewayId: !Ref InternetGateway
 
-# -----------------------------
-# Public Subnets
-# -----------------------------
+# =====================================================
+# SUBNETS
+# =====================================================
 
   PublicSubnet1:
     Type: AWS::EC2::Subnet
@@ -54,9 +39,6 @@ Resources:
       CidrBlock: 10.0.1.0/24
       AvailabilityZone: !Select [0, !GetAZs '']
       MapPublicIpOnLaunch: true
-      Tags:
-        - Key: Name
-          Value: PublicSubnet1
 
   PublicSubnet2:
     Type: AWS::EC2::Subnet
@@ -65,20 +47,17 @@ Resources:
       CidrBlock: 10.0.2.0/24
       AvailabilityZone: !Select [1, !GetAZs '']
       MapPublicIpOnLaunch: true
-      Tags:
-        - Key: Name
-          Value: PublicSubnet2
 
-# -----------------------------
-# Route Table
-# -----------------------------
+# =====================================================
+# ROUTING
+# =====================================================
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref LabVPC
 
-  PublicRoute:
+  DefaultRoute:
     Type: AWS::EC2::Route
     DependsOn: AttachGateway
     Properties:
@@ -86,21 +65,21 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
-  Subnet1RouteAssociation:
+  Subnet1Association:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
 
-  Subnet2RouteAssociation:
+  Subnet2Association:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
 
-# -----------------------------
-# Security Group
-# -----------------------------
+# =====================================================
+# SECURITY GROUP
+# =====================================================
 
   WebSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -120,71 +99,9 @@ Resources:
           ToPort: 80
           CidrIp: 0.0.0.0/0
 
-# -----------------------------
-# EC2 Instance 1
-# -----------------------------
-
-  WebServer1:
-    Type: AWS::EC2::Instance
-    Properties:
-      InstanceType: t3.micro
-      KeyName: !Ref KeyName
-
-      ImageId: ami-0c02fb55956c7d316
-
-      SubnetId: !Ref PublicSubnet1
-
-      SecurityGroupIds:
-        - !Ref WebSecurityGroup
-
-      Tags:
-        - Key: Name
-          Value: WebServer1
-
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          yum update -y
-          amazon-linux-extras install nginx1 -y
-          systemctl start nginx
-          systemctl enable nginx
-
-          echo "<h1>Servidor 1 funcionando</h1>" > /usr/share/nginx/html/index.html
-
-# -----------------------------
-# EC2 Instance 2
-# -----------------------------
-
-  WebServer2:
-    Type: AWS::EC2::Instance
-    Properties:
-      InstanceType: t3.micro
-      KeyName: !Ref KeyName
-
-      ImageId: ami-0c02fb55956c7d316
-
-      SubnetId: !Ref PublicSubnet2
-
-      SecurityGroupIds:
-        - !Ref WebSecurityGroup
-
-      Tags:
-        - Key: Name
-          Value: WebServer2
-
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          yum update -y
-          amazon-linux-extras install nginx1 -y
-          systemctl start nginx
-          systemctl enable nginx
-
-          echo "<h1>Servidor 2 funcionando</h1>" > /usr/share/nginx/html/index.html
-
-# -----------------------------
-# Load Balancer
-# -----------------------------
+# =====================================================
+# LOAD BALANCER
+# =====================================================
 
   ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -200,29 +117,24 @@ Resources:
         - !Ref PublicSubnet1
         - !Ref PublicSubnet2
 
-# -----------------------------
-# Target Group
-# -----------------------------
+# =====================================================
+# TARGET GROUP
+# =====================================================
 
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      Name: LabTargetGroup
       Port: 80
       Protocol: HTTP
       VpcId: !Ref LabVPC
       TargetType: instance
 
-      Targets:
-        - Id: !Ref WebServer1
-        - Id: !Ref WebServer2
-
       HealthCheckPath: /
       HealthCheckProtocol: HTTP
 
-# -----------------------------
-# Listener
-# -----------------------------
+# =====================================================
+# LISTENER
+# =====================================================
 
   Listener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -235,20 +147,906 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref TargetGroup
 
-# -----------------------------
-# Outputs
-# -----------------------------
+# =====================================================
+# EC2 INSTANCES
+# =====================================================
+
+  WebServer1:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      ImageId: ami-0c02fb55956c7d316
+      SubnetId: !Ref PublicSubnet1
+
+      SecurityGroupIds:
+        - !Ref WebSecurityGroup
+
+      Tags:
+        - Key: Name
+          Value: WebServer1
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+
+          yum update -y
+          amazon-linux-extras install nginx1 -y
+
+          systemctl start nginx
+          systemctl enable nginx
+
+          HOSTNAME=$(hostname)
+
+          cat <<EOF > /usr/share/nginx/html/index.html
+          <!DOCTYPE html>
+          <html lang="es">
+
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>AWS High Availability</title>
+
+              <style>
+
+                  *{
+                      margin:0;
+                      padding:0;
+                      box-sizing:border-box;
+                      font-family:Arial,sans-serif;
+                  }
+
+                  body{
+                      background: linear-gradient(135deg,#0f172a,#1e293b,#334155);
+                      color:white;
+                      height:100vh;
+                      display:flex;
+                      justify-content:center;
+                      align-items:center;
+                  }
+
+                  .container{
+                      width:80%;
+                      max-width:700px;
+                      background:rgba(255,255,255,0.08);
+                      padding:50px;
+                      border-radius:20px;
+                      text-align:center;
+                      backdrop-filter:blur(10px);
+                      box-shadow:0 0 30px rgba(0,0,0,0.5);
+                  }
+
+                  h1{
+                      font-size:3rem;
+                      color:#38bdf8;
+                      margin-bottom:20px;
+                  }
+
+                  h2{
+                      color:#f8fafc;
+                      margin-bottom:20px;
+                  }
+
+                  p{
+                      color:#cbd5e1;
+                      line-height:1.7;
+                      margin-bottom:20px;
+                  }
+
+                  .badge{
+                      display:inline-block;
+                      padding:12px 25px;
+                      background:#22c55e;
+                      border-radius:999px;
+                      font-weight:bold;
+                      animation:pulse 2s infinite;
+                  }
+
+                  @keyframes pulse{
+                      0%{
+                          transform:scale(1);
+                      }
+
+                      50%{
+                          transform:scale(1.05);
+                      }
+
+                      100%{
+                          transform:scale(1);
+                      }
+                  }
+
+                  .server{
+                      margin-top:30px;
+                      font-size:1.2rem;
+                      color:#facc15;
+                  }
+
+              </style>
+          </head>
+
+          <body>
+
+              <div class="container">
+
+                  <h1>AWS High Availability</h1>
+
+                  <h2>NGINX + EC2 + Load Balancer</h2>
+
+                  <p>
+                      Infraestructura desplegada automáticamente utilizando
+                      AWS CloudFormation y múltiples instancias EC2.
+                  </p>
+
+                  <div class="badge">
+                      Servidor funcionando correctamente
+                  </div>
+
+                  <div class="server">
+                      Instancia activa: $HOSTNAME
+                  </div>
+
+              </div>
+
+          </body>
+
+          </html>
+          EOF
+
+  WebServer2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      ImageId: ami-0c02fb55956c7d316
+      SubnetId: !Ref PublicSubnet2
+
+      SecurityGroupIds:
+        - !Ref WebSecurityGroup
+
+      Tags:
+        - Key: Name
+          Value: WebServer2
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+
+          yum update -y
+          amazon-linux-extras install nginx1 -y
+
+          systemctl start nginx
+          systemctl enable nginx
+
+          HOSTNAME=$(hostname)
+
+          cat <<EOF > /usr/share/nginx/html/index.html
+          <!DOCTYPE html>
+          <html lang="es">
+
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>AWS High Availability</title>
+
+              <style>
+
+                  *{
+                      margin:0;
+                      padding:0;
+                      box-sizing:border-box;
+                      font-family:Arial,sans-serif;
+                  }
+
+                  body{
+                      background: linear-gradient(135deg,#0f172a,#1e293b,#334155);
+                      color:white;
+                      height:100vh;
+                      display:flex;
+                      justify-content:center;
+                      align-items:center;
+                  }
+
+                  .container{
+                      width:80%;
+                      max-width:700px;
+                      background:rgba(255,255,255,0.08);
+                      padding:50px;
+                      border-radius:20px;
+                      text-align:center;
+                      backdrop-filter:blur(10px);
+                      box-shadow:0 0 30px rgba(0,0,0,0.5);
+                  }
+
+                  h1{
+                      font-size:3rem;
+                      color:#38bdf8;
+                      margin-bottom:20px;
+                  }
+
+                  h2{
+                      color:#f8fafc;
+                      margin-bottom:20px;
+                  }
+
+                  p{
+                      color:#cbd5e1;
+                      line-height:1.7;
+                      margin-bottom:20px;
+                  }
+
+                  .badge{
+                      display:inline-block;
+                      padding:12px 25px;
+                      background:#22c55e;
+                      border-radius:999px;
+                      font-weight:bold;
+                      animation:pulse 2s infinite;
+                  }
+
+                  @keyframes pulse{
+                      0%{
+                          transform:scale(1);
+                      }
+
+                      50%{
+                          transform:scale(1.05);
+                      }
+
+                      100%{
+                          transform:scale(1);
+                      }
+                  }
+
+                  .server{
+                      margin-top:30px;
+                      font-size:1.2rem;
+                      color:#facc15;
+                  }
+
+              </style>
+          </head>
+
+          <body>
+
+              <div class="container">
+
+                  <h1>AWS High Availability</h1>
+
+                  <h2>NGINX + EC2 + Load Balancer</h2>
+
+                  <p>
+                      Infraestructura desplegada automáticamente utilizando
+                      AWS CloudFormation y múltiples instancias EC2.
+                  </p>
+
+                  <div class="badge">
+                      Servidor funcionando correctamente
+                  </div>
+
+                  <div class="server">
+                      Instancia activa: $HOSTNAME
+                  </div>
+
+              </div>
+
+          </body>
+
+          </html>
+          EOF
+
+  WebServer3:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      ImageId: ami-0c02fb55956c7d316
+      SubnetId: !Ref PublicSubnet1
+
+      SecurityGroupIds:
+        - !Ref WebSecurityGroup
+
+      Tags:
+        - Key: Name
+          Value: WebServer3
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          amazon-linux-extras install nginx1 -y
+          systemctl start nginx
+          systemctl enable nginx
+
+          HOSTNAME=$(hostname)
+
+          cat <<EOF > /usr/share/nginx/html/index.html
+          <!DOCTYPE html>
+          <html lang="es">
+
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>AWS High Availability</title>
+
+              <style>
+
+                  *{
+                      margin:0;
+                      padding:0;
+                      box-sizing:border-box;
+                      font-family:Arial,sans-serif;
+                  }
+
+                  body{
+                      background: linear-gradient(135deg,#0f172a,#1e293b,#334155);
+                      color:white;
+                      height:100vh;
+                      display:flex;
+                      justify-content:center;
+                      align-items:center;
+                  }
+
+                  .container{
+                      width:80%;
+                      max-width:700px;
+                      background:rgba(255,255,255,0.08);
+                      padding:50px;
+                      border-radius:20px;
+                      text-align:center;
+                      backdrop-filter:blur(10px);
+                      box-shadow:0 0 30px rgba(0,0,0,0.5);
+                  }
+
+                  h1{
+                      font-size:3rem;
+                      color:#38bdf8;
+                      margin-bottom:20px;
+                  }
+
+                  h2{
+                      color:#f8fafc;
+                      margin-bottom:20px;
+                  }
+
+                  p{
+                      color:#cbd5e1;
+                      line-height:1.7;
+                      margin-bottom:20px;
+                  }
+
+                  .badge{
+                      display:inline-block;
+                      padding:12px 25px;
+                      background:#22c55e;
+                      border-radius:999px;
+                      font-weight:bold;
+                      animation:pulse 2s infinite;
+                  }
+
+                  @keyframes pulse{
+                      0%{
+                          transform:scale(1);
+                      }
+
+                      50%{
+                          transform:scale(1.05);
+                      }
+
+                      100%{
+                          transform:scale(1);
+                      }
+                  }
+
+                  .server{
+                      margin-top:30px;
+                      font-size:1.2rem;
+                      color:#facc15;
+                  }
+
+              </style>
+          </head>
+
+          <body>
+
+              <div class="container">
+
+                  <h1>AWS High Availability</h1>
+
+                  <h2>NGINX + EC2 + Load Balancer</h2>
+
+                  <p>
+                      Infraestructura desplegada automáticamente utilizando
+                      AWS CloudFormation y múltiples instancias EC2.
+                  </p>
+
+                  <div class="badge">
+                      Servidor funcionando correctamente
+                  </div>
+
+                  <div class="server">
+                      Instancia activa: $HOSTNAME
+                  </div>
+
+              </div>
+
+          </body>
+
+          </html>
+          EOF
+
+  WebServer4:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      ImageId: ami-0c02fb55956c7d316
+      SubnetId: !Ref PublicSubnet2
+
+      SecurityGroupIds:
+        - !Ref WebSecurityGroup
+
+      Tags:
+        - Key: Name
+          Value: WebServer4
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          amazon-linux-extras install nginx1 -y
+          systemctl start nginx
+          systemctl enable nginx
+
+          HOSTNAME=$(hostname)
+
+          cat <<EOF > /usr/share/nginx/html/index.html
+          <!DOCTYPE html>
+          <html lang="es">
+
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>AWS High Availability</title>
+
+              <style>
+
+                  *{
+                      margin:0;
+                      padding:0;
+                      box-sizing:border-box;
+                      font-family:Arial,sans-serif;
+                  }
+
+                  body{
+                      background: linear-gradient(135deg,#0f172a,#1e293b,#334155);
+                      color:white;
+                      height:100vh;
+                      display:flex;
+                      justify-content:center;
+                      align-items:center;
+                  }
+
+                  .container{
+                      width:80%;
+                      max-width:700px;
+                      background:rgba(255,255,255,0.08);
+                      padding:50px;
+                      border-radius:20px;
+                      text-align:center;
+                      backdrop-filter:blur(10px);
+                      box-shadow:0 0 30px rgba(0,0,0,0.5);
+                  }
+
+                  h1{
+                      font-size:3rem;
+                      color:#38bdf8;
+                      margin-bottom:20px;
+                  }
+
+                  h2{
+                      color:#f8fafc;
+                      margin-bottom:20px;
+                  }
+
+                  p{
+                      color:#cbd5e1;
+                      line-height:1.7;
+                      margin-bottom:20px;
+                  }
+
+                  .badge{
+                      display:inline-block;
+                      padding:12px 25px;
+                      background:#22c55e;
+                      border-radius:999px;
+                      font-weight:bold;
+                      animation:pulse 2s infinite;
+                  }
+
+                  @keyframes pulse{
+                      0%{
+                          transform:scale(1);
+                      }
+
+                      50%{
+                          transform:scale(1.05);
+                      }
+
+                      100%{
+                          transform:scale(1);
+                      }
+                  }
+
+                  .server{
+                      margin-top:30px;
+                      font-size:1.2rem;
+                      color:#facc15;
+                  }
+
+              </style>
+          </head>
+
+          <body>
+
+              <div class="container">
+
+                  <h1>AWS High Availability</h1>
+
+                  <h2>NGINX + EC2 + Load Balancer</h2>
+
+                  <p>
+                      Infraestructura desplegada automáticamente utilizando
+                      AWS CloudFormation y múltiples instancias EC2.
+                  </p>
+
+                  <div class="badge">
+                      Servidor funcionando correctamente
+                  </div>
+
+                  <div class="server">
+                      Instancia activa: $HOSTNAME
+                  </div>
+
+              </div>
+
+          </body>
+
+          </html>
+          EOF
+
+  WebServer5:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      ImageId: ami-0c02fb55956c7d316
+      SubnetId: !Ref PublicSubnet1
+
+      SecurityGroupIds:
+        - !Ref WebSecurityGroup
+
+      Tags:
+        - Key: Name
+          Value: WebServer5
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          amazon-linux-extras install nginx1 -y
+          systemctl start nginx
+          systemctl enable nginx
+
+          HOSTNAME=$(hostname)
+
+          cat <<EOF > /usr/share/nginx/html/index.html
+          <!DOCTYPE html>
+          <html lang="es">
+
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>AWS High Availability</title>
+
+              <style>
+
+                  *{
+                      margin:0;
+                      padding:0;
+                      box-sizing:border-box;
+                      font-family:Arial,sans-serif;
+                  }
+
+                  body{
+                      background: linear-gradient(135deg,#0f172a,#1e293b,#334155);
+                      color:white;
+                      height:100vh;
+                      display:flex;
+                      justify-content:center;
+                      align-items:center;
+                  }
+
+                  .container{
+                      width:80%;
+                      max-width:700px;
+                      background:rgba(255,255,255,0.08);
+                      padding:50px;
+                      border-radius:20px;
+                      text-align:center;
+                      backdrop-filter:blur(10px);
+                      box-shadow:0 0 30px rgba(0,0,0,0.5);
+                  }
+
+                  h1{
+                      font-size:3rem;
+                      color:#38bdf8;
+                      margin-bottom:20px;
+                  }
+
+                  h2{
+                      color:#f8fafc;
+                      margin-bottom:20px;
+                  }
+
+                  p{
+                      color:#cbd5e1;
+                      line-height:1.7;
+                      margin-bottom:20px;
+                  }
+
+                  .badge{
+                      display:inline-block;
+                      padding:12px 25px;
+                      background:#22c55e;
+                      border-radius:999px;
+                      font-weight:bold;
+                      animation:pulse 2s infinite;
+                  }
+
+                  @keyframes pulse{
+                      0%{
+                          transform:scale(1);
+                      }
+
+                      50%{
+                          transform:scale(1.05);
+                      }
+
+                      100%{
+                          transform:scale(1);
+                      }
+                  }
+
+                  .server{
+                      margin-top:30px;
+                      font-size:1.2rem;
+                      color:#facc15;
+                  }
+
+              </style>
+          </head>
+
+          <body>
+
+              <div class="container">
+
+                  <h1>AWS High Availability</h1>
+
+                  <h2>NGINX + EC2 + Load Balancer</h2>
+
+                  <p>
+                      Infraestructura desplegada automáticamente utilizando
+                      AWS CloudFormation y múltiples instancias EC2.
+                  </p>
+
+                  <div class="badge">
+                      Servidor funcionando correctamente
+                  </div>
+
+                  <div class="server">
+                      Instancia activa: $HOSTNAME
+                  </div>
+
+              </div>
+
+          </body>
+
+          </html>
+          EOF
+
+  WebServer6:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      ImageId: ami-0c02fb55956c7d316
+      SubnetId: !Ref PublicSubnet2
+
+      SecurityGroupIds:
+        - !Ref WebSecurityGroup
+
+      Tags:
+        - Key: Name
+          Value: WebServer6
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          amazon-linux-extras install nginx1 -y
+          systemctl start nginx
+          systemctl enable nginx
+
+          HOSTNAME=$(hostname)
+
+          cat <<EOF > /usr/share/nginx/html/index.html
+          <!DOCTYPE html>
+          <html lang="es">
+
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>AWS High Availability</title>
+
+              <style>
+
+                  *{
+                      margin:0;
+                      padding:0;
+                      box-sizing:border-box;
+                      font-family:Arial,sans-serif;
+                  }
+
+                  body{
+                      background: linear-gradient(135deg,#0f172a,#1e293b,#334155);
+                      color:white;
+                      height:100vh;
+                      display:flex;
+                      justify-content:center;
+                      align-items:center;
+                  }
+
+                  .container{
+                      width:80%;
+                      max-width:700px;
+                      background:rgba(255,255,255,0.08);
+                      padding:50px;
+                      border-radius:20px;
+                      text-align:center;
+                      backdrop-filter:blur(10px);
+                      box-shadow:0 0 30px rgba(0,0,0,0.5);
+                  }
+
+                  h1{
+                      font-size:3rem;
+                      color:#38bdf8;
+                      margin-bottom:20px;
+                  }
+
+                  h2{
+                      color:#f8fafc;
+                      margin-bottom:20px;
+                  }
+
+                  p{
+                      color:#cbd5e1;
+                      line-height:1.7;
+                      margin-bottom:20px;
+                  }
+
+                  .badge{
+                      display:inline-block;
+                      padding:12px 25px;
+                      background:#22c55e;
+                      border-radius:999px;
+                      font-weight:bold;
+                      animation:pulse 2s infinite;
+                  }
+
+                  @keyframes pulse{
+                      0%{
+                          transform:scale(1);
+                      }
+
+                      50%{
+                          transform:scale(1.05);
+                      }
+
+                      100%{
+                          transform:scale(1);
+                      }
+                  }
+
+                  .server{
+                      margin-top:30px;
+                      font-size:1.2rem;
+                      color:#facc15;
+                  }
+
+              </style>
+          </head>
+
+          <body>
+
+              <div class="container">
+
+                  <h1>AWS High Availability</h1>
+
+                  <h2>NGINX + EC2 + Load Balancer</h2>
+
+                  <p>
+                      Infraestructura desplegada automáticamente utilizando
+                      AWS CloudFormation y múltiples instancias EC2.
+                  </p>
+
+                  <div class="badge">
+                      Servidor funcionando correctamente
+                  </div>
+
+                  <div class="server">
+                      Instancia activa: $HOSTNAME
+                  </div>
+
+              </div>
+
+          </body>
+
+          </html>
+          EOF
+
+# =====================================================
+# ATTACH INSTANCES TO TARGET GROUP
+# =====================================================
+
+  Target1:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
+    Properties:
+      TargetGroupArn: !Ref TargetGroup
+      TargetId: !Ref WebServer1
+      Port: 80
+
+  Target2:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
+    Properties:
+      TargetGroupArn: !Ref TargetGroup
+      TargetId: !Ref WebServer2
+      Port: 80
+
+  Target3:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
+    Properties:
+      TargetGroupArn: !Ref TargetGroup
+      TargetId: !Ref WebServer3
+      Port: 80
+
+  Target4:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
+    Properties:
+      TargetGroupArn: !Ref TargetGroup
+      TargetId: !Ref WebServer4
+      Port: 80
+
+  Target5:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
+    Properties:
+      TargetGroupArn: !Ref TargetGroup
+      TargetId: !Ref WebServer5
+      Port: 80
+
+  Target6:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroupAttachment
+    Properties:
+      TargetGroupArn: !Ref TargetGroup
+      TargetId: !Ref WebServer6
+      Port: 80
+
+# =====================================================
+# OUTPUTS
+# =====================================================
 
 Outputs:
 
   LoadBalancerDNS:
     Description: DNS del Load Balancer
     Value: !GetAtt ApplicationLoadBalancer.DNSName
-
-  Instance1PublicIP:
-    Description: IP pública de la instancia 1
-    Value: !GetAtt WebServer1.PublicIp
-
-  Instance2PublicIP:
-    Description: IP pública de la instancia 2
-    Value: !GetAtt WebServer2.PublicIp
